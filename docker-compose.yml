@@ -1,14 +1,18 @@
 services:
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama-data:/root/.ollama
+    networks: [app-net]
+    restart: unless-stopped
+
   backend:
     build: ./agent
     environment:
-      - OLLAMA_URL=http://host.docker.internal:11434
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
-    expose:
-      - "8000"
-    networks:
-      - app-net
+      - OLLAMA_URL=http://ollama:11434
+    depends_on: [ollama]
+    expose: ["8000"]
+    networks: [app-net]
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 10s
@@ -18,16 +22,17 @@ services:
 
   frontend:
     build: ./web
-    ports:
-      - "3000:3000"
+    ports: ["3000:3000"]
     environment:
       - BACKEND_INTERNAL_URL=http://backend:8000
-    networks:
-      - app-net
+    networks: [app-net]
     depends_on:
       backend:
         condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  ollama-data:
 
 networks:
   app-net:
