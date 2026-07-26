@@ -1,11 +1,15 @@
 services:
   backend:
     build: ./agent
+    environment:
+      - OLLAMA_URL=http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     expose:
       - "8000"
     networks:
       - app-net
-    restart: unless-stopped
+    
 
   frontend:
     build: ./web

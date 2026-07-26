@@ -11,76 +11,7 @@ import {
   VStack,
 } from '@chakra-ui/react';
 import { ArrowUp, Menu, Plus } from 'lucide-react';
-import { Inter, Playfair_Display } from 'next/font/google';
-
-const inter = Inter({
-  subsets: ['latin'],
-  weight: ['400', '500', '600'],
-});
-
-const wordmark = Playfair_Display({
-  subsets: ['latin'],
-  style: ['italic'],
-  weight: ['600'],
-});
-
-const colors = {
-  base: '#0A0A0B',
-  surface: '#131315',
-  elev: '#1B1B1E',
-  accent: '#F5F1E8',
-  text: '#F5F1E8',
-  textMuted: 'rgba(245, 241, 232, 0.55)',
-  placeholder: 'rgba(245, 241, 232, 0.35)',
-  hairline: 'rgba(245, 241, 232, 0.08)',
-  hover: 'rgba(245, 241, 232, 0.06)',
-};
-
-type Role = 'user' | 'assistant';
-type MessageStatus = 'thinking' | 'streaming' | undefined;
-
-interface Message {
-  id: string;
-  role: Role;
-  content: string;
-  status?: MessageStatus;
-  error?: boolean;
-}
-
-function getGreeting(hour: number): string {
-  if (hour < 5) return 'Good night';
-  if (hour < 12) return 'Good morning';
-  if (hour < 18) return 'Good afternoon';
-  return 'Good evening';
-}
-
-function Orb({
-  size = 12,
-  state = 'idle',
-}: {
-  size?: number;
-  state?: 'idle' | 'thinking' | 'streaming';
-}) {
-  const stateClass =
-    state === 'thinking'
-      ? ' smsm-orb-thinking'
-      : state === 'streaming'
-      ? ' smsm-orb-active'
-      : '';
-
-  return (
-    <Box
-      position="relative"
-      flexShrink={0}
-      w={`${size}px`}
-      h={`${size}px`}
-      borderRadius="full"
-      className={`smsm-orb${stateClass}`}
-    >
-      <Box className="smsm-orb-shine" />
-    </Box>
-  );
-}
+import { colors, getGreeting, inter, Message, Orb, wordmark } from './utils/Extras';
 
 const ChatComponent = () => {
   const [messages, setMessages] = useState<Message[]>([]);
@@ -120,7 +51,7 @@ const ChatComponent = () => {
     ]);
 
     try {
-      const res = await fetch(`/api/chat/stream`, {
+      const res = await fetch(`/api/chat/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text }),
@@ -458,17 +389,6 @@ const ChatComponent = () => {
 
           <HStack justify="space-between" mt={2}>
             <HStack gap={1}>
-              {/* <IconButton
-                aria-label="Attach file"
-                variant="ghost"
-                size="sm"
-                color={colors.textMuted}
-                borderRadius="full"
-                _hover={{ bg: colors.hover }}
-              >
-                <Paperclip size={18} />
-              </IconButton> */}
-
               <HStack
                 gap={1.5}
                 px={3}
@@ -485,17 +405,6 @@ const ChatComponent = () => {
             </HStack>
 
             <HStack gap={1}>
-              {/* <IconButton
-                aria-label="Voice input"
-                variant="ghost"
-                size="sm"
-                color={colors.textMuted}
-                borderRadius="full"
-                _hover={{ bg: colors.hover }}
-              >
-                <Mic size={18} />
-              </IconButton> */}
-
               <IconButton
                 aria-label="Send message"
                 size="sm"

@@ -8,7 +8,6 @@ from pydantic import BaseModel
 import os
 
 OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434")
-
 MODEL = "llama3.2:3b"
 
 app = FastAPI()
@@ -46,6 +45,8 @@ async def health():
     async with httpx.AsyncClient(timeout=5) as client:
         try:
             r = await client.get(f"{OLLAMA_URL}/api/tags")
-            return {"ollama": "up" if r.status_code == 200 else "down"}
+            if r.status_code == 200:
+                return {"ollama": "up"}
         except Exception:
-            return {"ollama": "down"}
+            pass
+    raise HTTPException(status_code=503, detail="ollama unreachable")
