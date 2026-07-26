@@ -7,28 +7,12 @@ services:
     restart: unless-stopped
 
   backend:
-    build: ./agent
+    build: ./server
     environment:
       - OLLAMA_URL=http://ollama:11434
     depends_on: [ollama]
     expose: ["8000"]
     networks: [app-net]
-    healthcheck:
-      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
-      interval: 10s
-      timeout: 3s
-      start_period: 5s
-    restart: unless-stopped
-
-  frontend:
-    build: ./web
-    ports: ["3000:3000"]
-    environment:
-      - BACKEND_INTERNAL_URL=http://backend:8000
-    networks: [app-net]
-    depends_on:
-      backend:
-        condition: service_healthy
     restart: unless-stopped
 
 volumes:
