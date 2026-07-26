@@ -1,15 +1,13 @@
 import { Box } from "@chakra-ui/react";
-import { Inter, Playfair_Display } from "next/font/google";
+import { Inter, Instrument_Serif } from "next/font/google";
 
 export const inter = Inter({
   subsets: ['latin'],
   weight: ['400', '500', '600'],
 });
 
-export const wordmark = Playfair_Display({
-  subsets: ['latin'],
-  style: ['italic'],
-  weight: ['600'],
+export const wordmark = Instrument_Serif({
+  weight: "400"
 });
 
 export const colors = {
