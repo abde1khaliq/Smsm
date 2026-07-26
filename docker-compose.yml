@@ -15,6 +15,17 @@ services:
     networks: [app-net]
     restart: unless-stopped
 
+  frontend:
+    build: ./interface
+    ports: ["3000:3000"]
+    environment:
+      - BACKEND_INTERNAL_URL=http://backend:8000
+    networks: [app-net]
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
 volumes:
   ollama-data:
 

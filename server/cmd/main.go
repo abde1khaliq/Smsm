@@ -1,9 +1,16 @@
 package main
 
-import "github.com/abde1khaliq/Smsm/server/internal/router"
+import (
+	"log"
+
+	"github.com/abde1khaliq/Smsm/server/config"
+	"github.com/abde1khaliq/Smsm/server/internal/router"
+)
 
 func main() {
+	config.Load()
+	log.Println("Starting on port:", config.App.Port)
+
 	r := router.SetupRouter()
-	r.LoadHTMLGlob("templates/*")
-	r.Run(":8080")
+	r.Run(":" + config.App.Port)
 }
