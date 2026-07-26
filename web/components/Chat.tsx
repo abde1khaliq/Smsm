@@ -10,14 +10,54 @@ import {
   Textarea,
   VStack,
 } from '@chakra-ui/react';
-import { ArrowUp, Menu, Plus } from 'lucide-react';
+import {
+  ArrowUp,
+  Check,
+  Copy,
+  Menu,
+  MoreHorizontal,
+  Plus,
+  RotateCcw,
+  ThumbsDown,
+  ThumbsUp,
+} from 'lucide-react';
 import { colors, getGreeting, inter, Message, Orb, wordmark } from './utils/Extras';
 
+// A streamed-in chunk of assistant text. Each one gets its own glow-on-arrival
+// animation, matching the mid-stream highlight in the reference mockup.
+interface Chunk {
+  id: string;
+  text: string;
+}
+
+// Extends whatever `Message` already looks like in Extras, without needing to
+// touch that file — these are all rendering/interaction concerns local to
+// this component: chunks for the glow animation, replyToText so a message
+// can be regenerated, liked for the thumbs up/down toggle.
+type ChatMessage = Message & {
+  chunks?: Chunk[];
+  replyToText?: string;
+  liked?: 'up' | 'down';
+};
+
+// Three staggered pulsing dots + label, replacing the message body while
+// waiting on the first token — matches the "01 · Thinking" reference frame.
+function ThinkingDots() {
+  return (
+    <HStack gap="4px">
+      <Box className="smsm-dot" />
+      <Box className="smsm-dot" style={{ animationDelay: '0.15s' }} />
+      <Box className="smsm-dot" style={{ animationDelay: '0.3s' }} />
+    </HStack>
+  );
+}
+
 const ChatComponent = () => {
-  const [messages, setMessages] = useState<Message[]>([]);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isBusy, setIsBusy] = useState(false);
   const [greeting, setGreeting] = useState('Hello');
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -29,32 +69,23 @@ const ChatComponent = () => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
 
-  const handleSend = async () => {
-    const text = input.trim();
-    if (!text || isBusy) return;
-
-    const userMessage: Message = {
-      id: crypto.randomUUID(),
-      role: 'user',
-      content: text,
-    };
-
-    setInput('');
-    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+  // Drives a single streamed reply into the message with id `replyId`.
+  // Shared by both handleSend (new message) and handleRegenerate (rerun).
+  const streamReply = async (replyId: string, promptText: string) => {
     setIsBusy(true);
-
-    const replyId = crypto.randomUUID();
-    setMessages((prev) => [
-      ...prev,
-      userMessage,
-      { id: replyId, role: 'assistant', content: '', status: 'thinking' },
-    ]);
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === replyId
+          ? { ...m, content: '', status: 'thinking', chunks: [], error: false }
+          : m
+      )
+    );
 
     try {
       const res = await fetch(`/api/chat/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({ message: promptText }),
       });
 
       if (!res.ok || !res.body) {
@@ -73,10 +104,17 @@ const ChatComponent = () => {
         if (!chunkText) continue;
 
         accumulated += chunkText;
+        const chunkId = crypto.randomUUID();
+
         setMessages((prev) =>
           prev.map((m) =>
             m.id === replyId
-              ? { ...m, content: accumulated, status: 'streaming' }
+              ? {
+                  ...m,
+                  content: accumulated,
+                  status: 'streaming',
+                  chunks: [...(m.chunks ?? []), { id: chunkId, text: chunkText }],
+                }
               : m
           )
         );
@@ -85,7 +123,7 @@ const ChatComponent = () => {
       setMessages((prev) =>
         prev.map((m) => (m.id === replyId ? { ...m, status: undefined } : m))
       );
-    } catch (err) {
+    } catch {
       setMessages((prev) =>
         prev.map((m) =>
           m.id === replyId
@@ -95,6 +133,7 @@ const ChatComponent = () => {
                   "Couldn't reach the server. Make sure the API is running and reachable, then try again.",
                 status: undefined,
                 error: true,
+                chunks: undefined,
               }
             : m
         )
@@ -102,6 +141,61 @@ const ChatComponent = () => {
     } finally {
       setIsBusy(false);
     }
+  };
+
+  const handleSend = async () => {
+    const text = input.trim();
+    if (!text || isBusy) return;
+
+    const userMessage: ChatMessage = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: text,
+    };
+
+    setInput('');
+    if (textareaRef.current) textareaRef.current.style.height = 'auto';
+
+    const replyId = crypto.randomUUID();
+    setMessages((prev) => [
+      ...prev,
+      userMessage,
+      {
+        id: replyId,
+        role: 'assistant',
+        content: '',
+        status: 'thinking',
+        chunks: [],
+        replyToText: text,
+      },
+    ]);
+
+    await streamReply(replyId, text);
+  };
+
+  const handleRegenerate = async (messageId: string) => {
+    if (isBusy) return;
+    const target = messages.find((m) => m.id === messageId);
+    if (!target?.replyToText) return;
+    await streamReply(messageId, target.replyToText);
+  };
+
+  const handleCopy = async (id: string, content: string) => {
+    try {
+      await navigator.clipboard.writeText(content);
+      setCopiedId(id);
+      setTimeout(() => setCopiedId((cur) => (cur === id ? null : cur)), 1500);
+    } catch {
+      // Clipboard API unavailable (e.g. insecure context) — not worth surfacing.
+    }
+  };
+
+  const handleFeedback = (id: string, value: 'up' | 'down') => {
+    setMessages((prev) =>
+      prev.map((m) =>
+        m.id === id ? { ...m, liked: m.liked === value ? undefined : value } : m
+      )
+    );
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -127,21 +221,49 @@ const ChatComponent = () => {
       className={inter.className}
     >
       <style>{`
+        /* ---- streaming cursor: 1px hard-blink, matches steps(2) 0.9s spec ---- */
         @keyframes smsm-blink {
-          0%, 49% { opacity: 1; }
-          50%, 100% { opacity: 0; }
+          to { opacity: 0; }
         }
         .smsm-cursor {
           display: inline-block;
-          width: 2px;
-          height: 1.05em;
-          background: ${colors.text};
-          margin-left: 2px;
-          vertical-align: text-bottom;
-          animation: smsm-blink 1s step-start infinite;
+          width: 1px;
+          height: 1em;
+          background: ${colors.accent};
+          vertical-align: -0.15em;
+          margin-left: 1px;
+          animation: smsm-blink 0.9s steps(2) infinite;
         }
         .smsm-textarea::placeholder {
           color: ${colors.placeholder};
+        }
+
+        /* ---- per-chunk glow: each streamed piece of text highlights on
+           arrival, then fades to plain — the animated version of the static
+           mid-stream highlight in the reference frame ---- */
+        .smsm-chunk {
+          display: inline;
+          padding: 0 1px;
+          margin: 0 -1px;
+          border-radius: 3px;
+          animation: smsm-chunk-glow 900ms ease-out forwards;
+        }
+        @keyframes smsm-chunk-glow {
+          0% { background: rgba(245, 241, 232, 0.28); }
+          100% { background: rgba(245, 241, 232, 0); }
+        }
+
+        /* ---- thinking dots: staggered pulse, paired with the orb's ring ---- */
+        .smsm-dot {
+          width: 5px;
+          height: 5px;
+          border-radius: 9999px;
+          background: ${colors.accent};
+          animation: smsm-dot-bounce 1s ease-in-out infinite;
+        }
+        @keyframes smsm-dot-bounce {
+          0%, 60%, 100% { transform: translateY(0); opacity: 0.35; }
+          30% { transform: translateY(-3px); opacity: 1; }
         }
 
         .smsm-orb {
@@ -218,8 +340,14 @@ const ChatComponent = () => {
           .smsm-orb-active,
           .smsm-orb-thinking,
           .smsm-orb-thinking::before,
-          .smsm-orb-shine {
+          .smsm-orb-shine,
+          .smsm-dot,
+          .smsm-chunk,
+          .smsm-cursor {
             animation: none !important;
+          }
+          .smsm-chunk {
+            background: transparent !important;
           }
         }
       `}</style>
@@ -303,7 +431,7 @@ const ChatComponent = () => {
                   px={5}
                   py={3.5}
                   borderRadius="18px"
-                  border={"1px solid"}
+                  border={'1px solid'}
                   borderColor={colors.elev}
                   fontSize="16px"
                   lineHeight="1.5"
@@ -326,18 +454,34 @@ const ChatComponent = () => {
                     }
                   />
                 </Box>
-                <Text
-                  color={m.error ? colors.textMuted : colors.text}
-                  fontSize="16px"
-                  lineHeight="1.6"
-                  flex="1"
-                  css={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
-                >
-                  {m.content}
-                  {m.status === 'streaming' && (
-                    <Box as="span" className="smsm-cursor" />
-                  )}
-                </Text>
+
+                {m.status === 'thinking' ? (
+                  <HStack gap={2} pt="4px">
+                    <ThinkingDots />
+                    <Text color={colors.textMuted} fontSize="14px">
+                      Smsm is thinking…
+                    </Text>
+                  </HStack>
+                ) : (
+                  <Text
+                    color={m.error ? colors.textMuted : colors.text}
+                    fontSize="16px"
+                    lineHeight="1.6"
+                    flex="1"
+                    css={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}
+                  >
+                    {m.status === 'streaming' && m.chunks
+                      ? m.chunks.map((c) => (
+                          <Box as="span" key={c.id} className="smsm-chunk">
+                            {c.text}
+                          </Box>
+                        ))
+                      : m.content}
+                    {m.status === 'streaming' && (
+                      <Box as="span" className="smsm-cursor" />
+                    )}
+                  </Text>
+                )}
               </HStack>
             )
           )}
